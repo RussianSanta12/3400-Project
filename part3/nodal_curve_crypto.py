@@ -1,14 +1,3 @@
-"""Prototype nodal-curve public-key cryptography system.
-
-This module demonstrates a thesis-inspired public-key workflow that combines:
-- RSA-style key generation for scalar exponents over n = p * q
-- Polynomial representation of messages
-- Polynomial exponentiation modulo a fixed nodal polynomial f(x)
-- A nodal-curve-style group operation helper
-
-Important:
-This is an educational prototype and is not production-ready cryptography.
-"""
 
 from __future__ import annotations
 
@@ -18,7 +7,7 @@ from typing import Dict, List, Sequence, Tuple
 
 
 Polynomial = List[int]
-PublicKey = Tuple[int, int]  # (n, e)
+PublicKey = Tuple[int, int]
 
 # Monic polynomial f(x) = x^2 + 1. Monic form keeps modular reduction simple.
 DEFAULT_F: Polynomial = [1, 0, 1]
@@ -30,7 +19,6 @@ def _lcm(a: int, b: int) -> int:
 
 
 def _is_probable_prime(candidate: int, rounds: int = 20) -> bool:
-    """Miller-Rabin primality test for odd integers >= 3."""
     if candidate < 2:
         return False
     small_primes = (2, 3, 5, 7, 11, 13, 17, 19, 23, 29)
@@ -48,7 +36,7 @@ def _is_probable_prime(candidate: int, rounds: int = 20) -> bool:
         s += 1
 
     for _ in range(rounds):
-        a = secrets.randbelow(candidate - 3) + 2  # [2, candidate-2]
+        a = secrets.randbelow(candidate - 3) + 2
         x = pow(a, d, candidate)
         if x == 1 or x == candidate - 1:
             continue
@@ -62,12 +50,10 @@ def _is_probable_prime(candidate: int, rounds: int = 20) -> bool:
 
 
 def _generate_prime(bit_length: int) -> int:
-    """Generate a probable prime with the requested bit length."""
     if bit_length < 8:
         raise ValueError("bit_length must be at least 8")
 
     while True:
-        # Force top bit and odd parity.
         candidate = secrets.randbits(bit_length) | (1 << (bit_length - 1)) | 1
         if _is_probable_prime(candidate):
             return candidate
@@ -117,7 +103,6 @@ def _poly_mul(a: Sequence[int], b: Sequence[int], modulus: int) -> Polynomial:
 
 
 def _poly_mod(poly: Sequence[int], modulus_poly: Sequence[int], modulus: int) -> Polynomial:
-    """Reduce poly modulo modulus_poly in Z_modulus[x]."""
     modp = _trim(modulus_poly)
     if len(modp) == 1 and modp[0] == 0:
         raise ValueError("modulus polynomial cannot be zero")
@@ -171,11 +156,6 @@ def _poly_pow_mod(
 
 
 def message_to_polynomial(message: str, modulus_n: int) -> Polynomial:
-    """Convert UTF-8 text to polynomial coefficients.
-
-    This prototype uses a constant polynomial t(x) = M, where M is the
-    big-endian integer encoding of the message bytes.
-    """
     raw = message.encode("utf-8")
     value = int.from_bytes(raw, byteorder="big", signed=False) if raw else 0
     if value >= modulus_n:
@@ -184,7 +164,6 @@ def message_to_polynomial(message: str, modulus_n: int) -> Polynomial:
 
 
 def polynomial_to_message(poly: Sequence[int]) -> str:
-    """Recover UTF-8 text from a constant polynomial representation."""
     value = _trim(poly)[0] if poly else 0
     if value == 0:
         return ""
@@ -199,19 +178,6 @@ def generate_keys(
     e_start: int = 65537,
     include_primes: bool = False,
 ):
-    """Generate public/private key material.
-
-    Steps:
-    1) Choose two primes p, q
-    2) Compute n = p * q
-    3) Compute thesis-style totient-like value lambda = lcm(p-1, q-1)
-    4) Select e with gcd(e, lambda) = 1
-    5) Compute d = e^{-1} mod lambda
-
-    Returns:
-    - default: ((n, e), d)
-    - if include_primes=True: ((n, e), d, {"p": p, "q": q, "totient_like": lambda})
-    """
     p = _generate_prime(bit_length)
     q = _generate_prime(bit_length)
     while q == p:
@@ -240,10 +206,6 @@ def encrypt(
     public_key: PublicKey,
     modulus_poly: Sequence[int] = DEFAULT_F,
 ) -> Dict[str, object]:
-    """Encrypt plaintext by polynomial exponentiation:
-
-    g(x) = t(x)^e mod f(x)
-    """
     n, e = public_key
     t_poly = message_to_polynomial(message, n)
     g_poly = _poly_pow_mod(t_poly, e, modulus_poly, n)
@@ -258,10 +220,6 @@ def decrypt(
     private_key: int,
     modulus_poly: Sequence[int] = DEFAULT_F,
 ) -> str:
-    """Decrypt ciphertext by inverse exponentiation:
-
-    t(x) = g(x)^d mod f(x)
-    """
     g_poly = ciphertext["poly"]
     n = int(ciphertext["n"])
     t_poly = _poly_pow_mod(g_poly, private_key, modulus_poly, n)
@@ -275,12 +233,6 @@ def nodal_group_operation(
     modulus_n: int,
     modulus_poly: Sequence[int] = DEFAULT_F,
 ) -> Polynomial:
-    """Nodal curve group operation helper.
-
-    If h1(x) + h2(x) == 0 mod f(x), return identity.
-    Otherwise:
-        h(x) = g2(x) * (h1(x) * h2(x) + x) mod f(x)
-    """
     summed = _poly_mod(_poly_add(h1, h2, modulus_n), modulus_poly, modulus_n)
     if summed == [0]:
         return IDENTITY.copy()
